@@ -50,12 +50,13 @@ class _TripPage extends State<TripPage> {
     </GetTokenConsultaViagens>
   </soap:Body>
 </soap:Envelope>''';
+  var envelope2;
   String _token= "";
+  String _teste = "";
   bool _add = true;
 
   @override
   void initState() {
-    // TODO: implement initState
     super.initState();
     _add = true;
   }
@@ -73,13 +74,44 @@ class _TripPage extends State<TripPage> {
         },
         body: envelope);
     var _response = response.body; // RESPONSE XML IS HERE
+    var xmlResponse = xml.XmlDocument.parse(_response); // DESERIALIZE XML
+
+    setState(() {
+      _token = xmlResponse.findAllElements('Token').map((node) => node.text).first;
+      _add = true;
+      envelope2 = '''<?xml version="1.0" encoding="utf-8"?>
+<soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Body>
+    <GetRegistrosConsultaViagens xmlns="http://tempuri.org/">
+      <token>$_token</token>
+      <pagina>1</pagina>
+    </GetRegistrosConsultaViagens>
+  </soap:Body>
+</soap:Envelope>''';
+    });
+  }
+
+  Future _getTrip() async {
+    await _getToken();
+    http.Response response = await http.post(
+        Uri.parse(
+            'http://sigla.guanabaraholding.com.br:8090/MoniTriipServices.asmx'),
+        headers: {
+          "Authorization": "Basic c2lnbGE6JCQwYmcxbXQyZnMzJCQ=",
+          "Content-Type": "text/xml; charset=utf-8",
+          "SOAPAction": "http://tempuri.org/GetRegistrosConsultaViagens",
+          "Host": "sigla.guanabaraholding.com.br",
+          "Access-Control-Allow-Origin": "*",
+        },
+        body: envelope2);
+    var _response = response.body; // RESPONSE XML IS HERE
     await _parsing(_response);
   }
 
   Future _parsing(var _response) async {
     var xmlResponse = xml.XmlDocument.parse(_response); // DESERIALIZE XML
     setState(() {
-      _token = xmlResponse.findAllElements('Token').map((node) => node.text).first;
+      _teste = xmlResponse.toXmlString(pretty: true, indent: '\t');
       _add = true;
     });
   }
@@ -98,7 +130,7 @@ class _TripPage extends State<TripPage> {
               ? Expanded(
                   flex: 1,
                   child: SingleChildScrollView(
-                    child: Text(_token,
+                    child: Text(_teste,
                         style: const TextStyle(
                           fontSize: 18.0
                         )),
@@ -109,7 +141,7 @@ class _TripPage extends State<TripPage> {
               setState(() {
                 _add = false;
               });
-              _getToken();
+              _getTrip();
             },
             child: const Text("Consultar"),
           )
