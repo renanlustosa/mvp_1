@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'package:xml/xml.dart' as xml;
+import 'package:mvp/Trip.dart';
+import 'package:mvp/views/trip_info_page.dart';
 import 'package:xml/xml.dart';
+
+List<Trip> trips = [];
+late int selectedIndex;
 
 class TripWidget extends StatefulWidget {
   const TripWidget({Key? key}) : super(key: key);
@@ -18,7 +22,7 @@ class _AppState extends State<TripWidget> {
         primarySwatch: Colors.blue,
       ),
       home: const TripPage(
-        title: 'Webservice Monitriip',
+        title: 'Lista de viagens',
         key: null,
       ),
     );
@@ -32,7 +36,6 @@ class TripPage extends StatefulWidget {
   _TripPage createState() => _TripPage();
 }
 
-// GET TOKEN
 class _TripPage extends State<TripPage> {
   var envelope = '''<?xml version="1.0" encoding="utf-8"?>
 <soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
@@ -51,14 +54,11 @@ class _TripPage extends State<TripPage> {
   </soap:Body>
 </soap:Envelope>''';
   var envelope2;
-  String _token= "";
-  String _teste = "";
-  bool _add = true;
+  String _token = "";
 
   @override
   void initState() {
     super.initState();
-    _add = true;
   }
 
   Future _getToken() async {
@@ -74,12 +74,11 @@ class _TripPage extends State<TripPage> {
         },
         body: envelope);
     var _response = response.body; // RESPONSE XML IS HERE
-    var xmlResponse = xml.XmlDocument.parse(_response); // DESERIALIZE XML
+    var xmlResponse = XmlDocument.parse(_response); // DESERIALIZE XML
 
-    setState(() {
-      _token = xmlResponse.findAllElements('Token').map((node) => node.text).first;
-      _add = true;
-      envelope2 = '''<?xml version="1.0" encoding="utf-8"?>
+    _token =
+        xmlResponse.findAllElements('Token').map((node) => node.text).first;
+    envelope2 = '''<?xml version="1.0" encoding="utf-8"?>
 <soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
   <soap:Body>
     <GetRegistrosConsultaViagens xmlns="http://tempuri.org/">
@@ -88,10 +87,9 @@ class _TripPage extends State<TripPage> {
     </GetRegistrosConsultaViagens>
   </soap:Body>
 </soap:Envelope>''';
-    });
   }
 
-  Future _getTrip() async {
+  Future getTripsFromXML(BuildContext context) async {
     await _getToken();
     http.Response response = await http.post(
         Uri.parse(
@@ -105,15 +103,19 @@ class _TripPage extends State<TripPage> {
         },
         body: envelope2);
     var _response = response.body; // RESPONSE XML IS HERE
-    await _parsing(_response);
-  }
+    var xmlResponse = XmlDocument.parse(_response); // DESERIALIZE XML
 
-  Future _parsing(var _response) async {
-    var xmlResponse = xml.XmlDocument.parse(_response); // DESERIALIZE XML
-    setState(() {
-      _teste = xmlResponse.toXmlString(pretty: true, indent: '\t');
-      _add = true;
-    });
+    var elements = xmlResponse.findAllElements("Registro");
+    return elements.map((element) {
+      return Trip(
+        element.findElements("Servico").first.text,
+        element.findElements("CodigoLinha").first.text,
+        element.findAllElements("PartidaPrev").first.text,
+        element.findAllElements("ChegadaPrev").first.text,
+        element.findAllElements("PlacaVeiculo").first.text,
+        element.findAllElements("Nome").first.text,
+      );
+    }).toList();
   }
 
   @override
@@ -123,30 +125,38 @@ class _TripPage extends State<TripPage> {
         title: Text(widget.title),
       ),
       body: Center(
-          child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: <Widget>[
-          _add == true
-              ? Expanded(
-                  flex: 1,
-                  child: SingleChildScrollView(
-                    child: Text(_teste,
-                        style: const TextStyle(
-                          fontSize: 18.0
-                        )),
-                  ))
-              : const CircularProgressIndicator(),
-          ElevatedButton(
-            onPressed: () {
-              setState(() {
-                _add = false;
-              });
-              _getTrip();
-            },
-            child: const Text("Consultar"),
-          )
-        ],
-      )),
+          child: FutureBuilder(
+              future: getTripsFromXML(context),
+              builder: (context, data) {
+                if (data.hasData) {
+                  trips = data.data as List<Trip>;
+                  return ListView.builder(
+                      itemCount: 4,
+                      itemBuilder: (context, index) {
+                        int indice = index + 1;
+                        return ListTile(
+                          title: Text("Viagem $indice"),
+                          subtitle: Text("Serviço: " + trips[index].servico),
+                          leading: const Icon(Icons.directions_bus),
+                          trailing: const Icon(Icons.info_outline),
+                          onTap: () {
+                            setState(() {
+                              selectedIndex = index;
+                            });
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                  builder: (context) => const TripInfoPage()),
+                            );
+                          },
+                        );
+                      });
+                } else {
+                  return const Center(
+                    child: CircularProgressIndicator(),
+                  );
+                }
+              })),
     );
   }
 }
